@@ -1,5 +1,7 @@
 # Style variables SD extension
 
+**Forge Neo compatibility:** HR prompt rewriting moved to `before_hr()` callback (Forge Neo doesn't populate HR prompts at `process()` time). Prompt line break cleaning no longer modifies input when no `$style` is used.
+
 Use styles or parts of them as variables inside the prompt.
 
 ## Motivation
