@@ -4,6 +4,8 @@
 
 Use styles or parts of them as variables inside the prompt.
 
+**Original extension** here https://github.com/SirVeggie/extension-style-vars
+
 ## Motivation
 
 This extension offers a more flexible use of styles. By using them as variables you can easily control the position of the styles more freely.
