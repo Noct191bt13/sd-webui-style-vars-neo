@@ -1,7 +1,6 @@
 import logging
 import re
 import random
-from copy import deepcopy
 
 from gradio.components import Component
 from modules import shared, script_callbacks, scripts
@@ -130,16 +129,7 @@ def on_ui_settings():
     shared.opts.add_option(extn_linebreaks, shared.OptionInfo(True, "Remove linebreaks", section=section))
     shared.opts.add_option(extn_info, shared.OptionInfo(True, "Save and load original prompt from generation info", section=section))
 
-def on_infotext_pasted(prompt: str, params: dict[str, str]):
-    if not check_feature(extn_info):
-        return
-    if TS_PROMPT in params:
-        params["Prompt"] = params.get(TS_PROMPT, params["Prompt"])
-    if TS_NEG in params:
-        params["Negative prompt"] = params.get(TS_NEG, params["Negative prompt"])
-
 script_callbacks.on_ui_settings(on_ui_settings)
-script_callbacks.on_infotext_pasted(on_infotext_pasted)
 
 # class
 class StyleVars(scripts.Script):
@@ -199,12 +189,9 @@ class StyleVars(scripts.Script):
         if not check_enabled():
             return
 
-        if check_feature(extn_info):
-            orig_pos_prompt = deepcopy(p.all_prompts[0])
-            orig_neg_prompt = deepcopy(p.all_negative_prompts[0])
-        else:
-            orig_pos_prompt = ""
-            orig_neg_prompt = ""
+        has_var = any(var_char in prompt for prompt in p.all_prompts + p.all_negative_prompts)
+        if not has_var:
+            return
 
         batch_size = p.batch_size
         for b_idx in range(p.n_iter):
@@ -220,8 +207,8 @@ class StyleVars(scripts.Script):
                 logger.debug(f"[B{b_idx:02d}][I{s_offs:02d}] neg prompt: {s_neg_prompt}")
 
         if check_feature(extn_info):
-            p.extra_generation_params.setdefault(TS_PROMPT, orig_pos_prompt)
-            p.extra_generation_params.setdefault(TS_NEG, orig_neg_prompt)
+            p.extra_generation_params.setdefault(TS_PROMPT, p.all_prompts[0])
+            p.extra_generation_params.setdefault(TS_NEG, p.all_negative_prompts[0])
 
     def before_hr(
         self,
@@ -232,6 +219,10 @@ class StyleVars(scripts.Script):
             return
         is_t2i = isinstance(p, StableDiffusionProcessingTxt2Img)
         if not is_t2i or not p.enable_hr:
+            return
+
+        has_var = any(var_char in prompt for prompt in p.all_hr_prompts + p.all_hr_negative_prompts)
+        if not has_var:
             return
 
         batch_size = p.batch_size
