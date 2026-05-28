@@ -150,11 +150,11 @@ class StyleVars(scripts.Script):
     def title(self):
         return extn_name
 
-    def show(self, is_img2img: bool):
+    def show(self, is_img2img: bool) -> object:
         return scripts.AlwaysVisible
 
     def _rewrite_prompt(self, prompt: str, neg: bool, hires: bool, seed: int):
-        style_names: list[str] = shared.prompt_styles.styles.keys()
+        style_names = list(shared.prompt_styles.styles.keys())
         style_names = sorted(style_names, key=len, reverse=True)
 
         depth = 0
@@ -191,6 +191,17 @@ class StyleVars(scripts.Script):
 
         return prompt
 
+    def _rewrite_list(self, prompts, neg_prompts, seeds, n_iter, batch_size, hires):
+        for b_idx in range(n_iter):
+            for s_offs in range(batch_size):
+                s_idx = b_idx * batch_size + s_offs
+
+                rewritten = self._rewrite_prompt(prompts[s_idx], False, hires, seeds[s_idx])
+                prompts[s_idx] = rewritten
+
+                neg_rewritten = self._rewrite_prompt(neg_prompts[s_idx], True, hires, seeds[s_idx])
+                neg_prompts[s_idx] = neg_rewritten
+
     def process(
         self,
         p: StableDiffusionProcessing,
@@ -206,45 +217,12 @@ class StyleVars(scripts.Script):
             orig_pos_prompt = ""
             orig_neg_prompt = ""
 
-        batch_size = p.batch_size
-        for b_idx in range(p.n_iter):
-            for s_offs in range(batch_size):
-                s_idx = b_idx * batch_size + s_offs  # offset of the prompt in all_prompts
+        self._rewrite_list(p.all_prompts, p.all_negative_prompts, p.all_seeds, p.n_iter, p.batch_size, False)
 
-                s_prompt = self._rewrite_prompt(p.all_prompts[s_idx], False, False, p.all_seeds[s_idx])
-                p.all_prompts[s_idx] = s_prompt
-                logger.debug(f"[B{b_idx:02d}][I{s_offs:02d}] prompt: {s_prompt}")
-
-                s_neg_prompt = self._rewrite_prompt(p.all_negative_prompts[s_idx], True, False, p.all_seeds[s_idx])
-                p.all_negative_prompts[s_idx] = s_neg_prompt
-                logger.debug(f"[B{b_idx:02d}][I{s_offs:02d}] neg prompt: {s_neg_prompt}")
+        is_t2i = isinstance(p, StableDiffusionProcessingTxt2Img)
+        if is_t2i and p.enable_hr:
+            self._rewrite_list(p.all_hr_prompts, p.all_hr_negative_prompts, p.all_seeds, p.n_iter, p.batch_size, True)
 
         if check_feature(extn_info):
             p.extra_generation_params.setdefault(TS_PROMPT, orig_pos_prompt)
             p.extra_generation_params.setdefault(TS_NEG, orig_neg_prompt)
-
-    def before_hr(
-        self,
-        p: StableDiffusionProcessing,
-        *args,
-    ):
-        if not check_enabled():
-            return
-        is_t2i = isinstance(p, StableDiffusionProcessingTxt2Img)
-        if not is_t2i or not p.enable_hr:
-            return
-
-        batch_size = p.batch_size
-        for b_idx in range(p.n_iter):
-            for s_offs in range(batch_size):
-                s_idx = b_idx * batch_size + s_offs
-
-                s_hr_prompt = self._rewrite_prompt(p.all_hr_prompts[s_idx], False, True, p.all_seeds[s_idx])
-                p.all_hr_prompts[s_idx] = s_hr_prompt
-                if s_hr_prompt != p.all_prompts[s_idx]:
-                    logger.debug(f"[B{b_idx:02d}][I{s_offs:02d}] HR prompt: {s_hr_prompt}")
-
-                s_hr_neg_prompt = self._rewrite_prompt(p.all_hr_negative_prompts[s_idx], True, True, p.all_seeds[s_idx])
-                p.all_hr_negative_prompts[s_idx] = s_hr_neg_prompt
-                if s_hr_neg_prompt != p.all_negative_prompts[s_idx]:
-                    logger.debug(f"[B{b_idx:02d}][I{s_offs:02d}] HR neg prompt: {s_hr_neg_prompt}")
